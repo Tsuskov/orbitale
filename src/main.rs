@@ -64,14 +64,16 @@ fn normalization_factor(n: u32, l: u32) -> f64 {
 // Simplified angular part (spherical harmonics)
 fn angular_part(theta: f64, _phi: f64, l: u32, m: i32) -> f64 {
     match (l, m) {
-        (0, 0) => 1.0 / (2.0 * PI.sqrt()), // s orbital
+        (0, 0) => 1.0 / (2.0 * PI.sqrt()),                 // s orbital
         (1, 0) => (3.0 / (4.0 * PI)).sqrt() * theta.cos(), // p_z
         (1, 1) | (1, -1) => (3.0 / (8.0 * PI)).sqrt() * theta.sin(), // p_x, p_y
         (2, 0) => (5.0 / (16.0 * PI)).sqrt() * (3.0 * theta.cos().powi(2) - 1.0), // d_z²
         (2, 1) | (2, -1) => (15.0 / (8.0 * PI)).sqrt() * theta.sin() * theta.cos(), // d_xz, d_yz
         (2, 2) | (2, -2) => (15.0 / (32.0 * PI)).sqrt() * theta.sin().powi(2), // d_x²-y², d_xy
         (3, 0) => (7.0 / (16.0 * PI)).sqrt() * (5.0 * theta.cos().powi(3) - 3.0 * theta.cos()), // f_z³
-        (3, 1) | (3, -1) => (21.0 / (64.0 * PI)).sqrt() * theta.sin() * (5.0 * theta.cos().powi(2) - 1.0), // f_xz², f_yz²
+        (3, 1) | (3, -1) => {
+            (21.0 / (64.0 * PI)).sqrt() * theta.sin() * (5.0 * theta.cos().powi(2) - 1.0)
+        } // f_xz², f_yz²
         (3, 2) | (3, -2) => (105.0 / (32.0 * PI)).sqrt() * theta.sin().powi(2) * theta.cos(), // f_xyz, f_...
         (3, 3) | (3, -3) => (35.0 / (64.0 * PI)).sqrt() * theta.sin().powi(3), // f_x³, f_y³
         _ => 0.0,
@@ -87,36 +89,45 @@ fn electron_density(r: f64, theta: f64, phi: f64, n: u32, l: u32, m: i32) -> f64
 // Render 2D slice in xy-plane (z=0, which is θ=π/2)
 fn render_orbital(n: u32, l: u32, m: i32, label: &str) {
     println!("\n=== {} orbital (n={}, l={}, m={}) ===", label, n, l, m);
-    
+
     let width = 60;
     let height = 30;
     let max_r = (n as f64) * (n as f64) * 3.0; // Scale with n²
 
-    // Calculate max density for normalization
+    let mut density_map: Vec<Vec<f64>> = vec![vec![0.0; width]; height]; // density_map[row][col]
+
+    // Calculate unnormalized density values throuout map
     let mut max_density = 0.0;
     for row in 0..height {
         for col in 0..width {
             let x = (col as f64 - width as f64 / 2.0) * max_r / (width as f64 / 2.0);
             let y = (height as f64 / 2.0 - row as f64) * max_r / (height as f64 / 2.0);
             let r = (x * x + y * y).sqrt();
-            let theta = if r > 1e-6 { y.atan2(x) + PI / 2.0 } else { PI / 2.0 };
+            let theta = if r > 1e-6 {
+                y.atan2(x) + PI / 2.0
+            } else {
+                PI / 2.0
+            };
+
             let density = electron_density(r, theta, 0.0, n, l, m);
+
             if density > max_density {
                 max_density = density;
-            }
+            } // determine max density for later normalization
+
+            density_map[row][col] = density;
         }
     }
 
-    let scale = if max_density > 0.0 { 30.0 / max_density } else { 1.0 };
+    let scale = if max_density > 0.0 {
+        30.0 / max_density
+    } else {
+        1.0
+    };
 
     for row in 0..height {
         for col in 0..width {
-            let x = (col as f64 - width as f64 / 2.0) * max_r / (width as f64 / 2.0);
-            let y = (height as f64 / 2.0 - row as f64) * max_r / (height as f64 / 2.0);
-            let r = (x * x + y * y).sqrt();
-            let theta = if r > 1e-6 { y.atan2(x) + PI / 2.0 } else { PI / 2.0 };
-            let density = electron_density(r, theta, 0.0, n, l, m);
-            let scaled = (density * scale) as u32;
+            let scaled = (density_map[row][col] * scale) as u32; // normalized density value
 
             let char = match scaled {
                 0..=1 => ' ',
@@ -126,6 +137,7 @@ fn render_orbital(n: u32, l: u32, m: i32, label: &str) {
                 16..=22 => '●',
                 _ => '█',
             };
+
             print!("{}", char);
         }
         println!();
